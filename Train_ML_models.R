@@ -317,7 +317,6 @@ train_all_models <-
     CARTFit <-
       train_model(
         "treebag",
-        tuneLength = 5,
         tuneGrid = NULL,
         recipe_no_pca,
         dtrain,
@@ -326,7 +325,6 @@ train_all_models <-
     
     CARTFit1 <-
       train_model("treebag",
-                  tuneLength = 5,
                   tuneGrid = NULL,
                   recipe_pca,
                   dtrain,
@@ -334,7 +332,6 @@ train_all_models <-
     
     CARTFit2 <-
       train_model("treebag",
-                  tuneLength = 5,
                   tuneGrid = NULL,
                   recipe_org,
                   dtrain,

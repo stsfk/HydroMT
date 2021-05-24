@@ -25,44 +25,9 @@ pacman::p_load(
 )
 
 
-# Constant ----------------------------------------------------------------
-
-old_model_names <-
-  c(
-    "lmFit",
-    "MARSFit"  ,
-    "PLSFit"   ,
-    "RidgeFit"    ,
-    "LassoFit",
-    "CARTFit"  ,
-    "KNNFit",
-    "CubistFit"  ,
-    "SVMFit"    ,
-    "svmRadialFit" ,
-    "RFFit"       ,
-    "XGBoost"
-  )
-
-new_model_names <-
-  c(
-    "LM",
-    "MARSBag",
-    "PLS",
-    "Ridge",
-    "Lasso",
-    "CART",
-    "KNN",
-    "Cubist",
-    "SVMPoly",
-    "SVMRadial",
-    "RF",
-    "XGBoost"
-  )
-
-
 # Data --------------------------------------------------------------------
 
-load("./mt_results/rain_mt.Rda")
+load("./mt_results/mr1_mt.Rda")
 
 get_consistent_rate <- function(x) {
   (sum(x == 4)) / length(x)
@@ -186,15 +151,6 @@ ggsave(
   dpi = 600
 )
 
-ggsave(
-  filename = "./paper_figures/Figure8.pdf",
-  width = 7,
-  height = 5,
-  units = "in"
-)
-
-
-
 
 # Plot winter
 data_plot2 <- data_plot %>%
@@ -240,10 +196,4 @@ ggsave(
   dpi = 600
 )
 
-ggsave(
-  filename = "./paper_figures/Figure_S7.pdf",
-  width = 7,
-  height = 5,
-  units = "in"
-)
 

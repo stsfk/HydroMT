@@ -4,7 +4,6 @@
 
 # Session Data files
 .RData
-*.Rda
 
 # User-specific files
 .Ruserdata
@@ -38,6 +37,9 @@ vignettes/*.pdf
 
 # R Environment Variables
 .Renviron
+
+# png files; published version of the figure
+*.png
 
 /data
 /modeling_results

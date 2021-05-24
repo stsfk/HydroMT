@@ -29,7 +29,7 @@ pacman::p_load(
 
 # Rain MT -----------------------------------------------------------------
 
-load("./mt_results/rain_mt.Rda")
+load("./mt_results/mr1_mt.Rda")
 
 # GOF
 data_gof <- eval_grid %>%
@@ -102,7 +102,7 @@ data_plot <- eval_grid3 %>%
       item,
       levels = c("r2", "mr1")
     ),
-    model = factor(model, levels = model_order, labels =  replace(model_order, model_order == "CART", "CARTBag"))
+    model = factor(model, levels = model_order)
   )
 
 
@@ -196,18 +196,11 @@ ggplot() +
 
 
 ggsave(
-  filename = "./paper_figures/figure10.png",
+  filename = "./paper_figures/Figure10.png",
   width = 7,
   height = 5.5,
   units = "in",
   dpi = 600
-)
-
-ggsave(
-  filename = "./paper_figures/figure10.pdf",
-  width = 7,
-  height = 5.5,
-  units = "in"
 )
 
 
@@ -277,16 +270,11 @@ ggplot() +
 
 
 ggsave(
-  filename = "./paper_figures/figure_S9.png",
+  filename = "./paper_figures/Figure_S9.png",
   width = 7,
   height = 5.5,
   units = "in",
   dpi = 600
 )
 
-ggsave(
-  filename = "./paper_figures/figure_S9.pdf",
-  width = 7,
-  height = 5.5,
-  units = "in"
-)
+

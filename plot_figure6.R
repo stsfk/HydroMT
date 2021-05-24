@@ -35,7 +35,7 @@ if (!dir.exists(dir_path)){
 
 # Rain MT -----------------------------------------------------------------
 
-load("./mt_results/rain_mt.Rda")
+load("./mt_results/mr1_mt.Rda")
 
 # model's GOF and consistent rate
 
@@ -106,8 +106,7 @@ data_plot <- eval_grid %>%
     ),
     model = factor(
       model,
-      levels = model_order,
-      labels =  replace(model_order, model_order == "CART", "CARTBag")
+      levels = model_order
     )
   )
 
@@ -188,12 +187,3 @@ ggsave(
   units = "in",
   dpi = 600
 )
-
-ggsave(
-  p,
-  filename = "./paper_figures/Figure6.pdf",
-  width = 7,
-  height = 5.5,
-  units = "in"
-)
-

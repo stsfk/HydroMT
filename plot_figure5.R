@@ -23,6 +23,41 @@ pacman::p_load(
   scales
 )
 
+# Constant ----------------------------------------------------------------
+
+old_model_names <-
+  c(
+    "lmFit",
+    "MARSFit"  ,
+    "PLSFit"   ,
+    "RidgeFit"    ,
+    "LassoFit",
+    "CARTFit"  ,
+    "KNNFit",
+    "CubistFit"  ,
+    "SVMFit"    ,
+    "svmRadialFit" ,
+    "RFFit"
+  )
+
+new_model_names <-
+  c(
+    "LM",
+    "MARSBag",
+    "PLS",
+    "Ridge",
+    "Lasso",
+    "CARTBag",
+    "KNN",
+    "Cubist",
+    "SVMPoly",
+    "SVMRadial",
+    "RF"
+  )
+
+
+# Function ----------------------------------------------------------------
+
 
 random_figure <- function(ii,
                           row_of_interest = 17,
@@ -78,41 +113,11 @@ random_figure <- function(ii,
     ) %>%
     mutate(gof_result = vector("list", 1))
   
-  old_model_names <-
-    c(
-      "lmFit",
-      "MARSFit"  ,
-      "PLSFit"   ,
-      "RidgeFit"    ,
-      "LassoFit",
-      "CARTFit"  ,
-      "KNNFit",
-      "CubistFit"  ,
-      "SVMFit"    ,
-      "svmRadialFit" ,
-      "RFFit"
-    )
-  
-  new_model_names <-
-    c(
-      "LM",
-      "MARSBag",
-      "PLS",
-      "Ridge",
-      "Lasso",
-      "CART",
-      "KNN",
-      "Cubist",
-      "SVMPoly",
-      "SVMRadial",
-      "RF"
-    )
-  
   col_names <- c("P0", "P1", "P3", "P5", "P7", "Pmin", "Pmax")
   
   # experiments
   
-  eval_grid <- eval_grid[row_of_interest, ]
+  eval_grid <- eval_grid[row_of_interest,]
   
   get_event_info <- function(eval_grid) {
     load(eval_grid$file_name)
@@ -131,58 +136,56 @@ random_figure <- function(ii,
     )
   }
   
+  # load models and data
+  load(eval_grid$file_name)
   
-  for (i in 1:nrow(eval_grid)) {
-    # load models and data
-    load(eval_grid$file_name[i])
-    xgb_model <- xgboost::xgb.load(eval_grid$xgb_file_name[i])
+  names(models) <-
+    plyr::mapvalues(names(models), old_model_names, new_model_names)
+  
+  
+  # construct test cases
+  test_cases_te <-
+    lapply((49:151) * 0.01,
+           prep_data_mutation,
+           df = dtest,
+           col_names = col_names) %>%
+    lapply(function(x)
+      x[id_of_interested_event,])
+  
+  
+  # predictions over ML models except XGBoost
+  preds_tes <- tibble(model = names(models),
+                      preds = vector("list", 1))
+  
+  for (j in seq_along(models)) {
+    model <- models[[j]]
     
-    names(models) <-
-      plyr::mapvalues(names(models), old_model_names, new_model_names)
-    
-    # construct test cases
-    test_cases_te <-
-      lapply((49:151) * 0.01,
-             prep_data_mutation,
-             df = dtest,
-             col_names = col_names) %>%
-      lapply(function(x)
-        x[id_of_interested_event, ])
-    
-    
-    # predictions over ML models except XGBoost
-    preds_tes <- tibble(model = names(models),
-                        preds = vector("list", 1))
-    
-    for (j in seq_along(models)) {
-      model <- models[[j]]
-      
-      preds_tes$preds[[j]] <- lapply(test_cases_te, function(x)
-        predict(model, x)) %>%
-        unlist()
-    }
-    
-    # predictions of XGBoost
-    preds_tes_xgb <- tibble(model = "XGBoost",
-                            preds = vector("list", 1))
-    
-    tibble_2_DMatrix <- function(x) {
-      xgb.DMatrix(data = data.matrix(x %>% select(-Qmax)),
-                  label = x$Qmax)
-    }
-    
-    preds_tes_xgb$preds[[i]] <-
-      lapply(test_cases_te, function(x)
-        predict(xgb_model, x %>% tibble_2_DMatrix)) %>%
+    preds_tes$preds[[j]] <- lapply(test_cases_te, function(x)
+      predict(model, x)) %>%
       unlist()
   }
   
+  # predictions of XGBoost
+  xgb_model <- xgb.load(eval_grid$xgb_file_name)
+  
+  preds_tes_xgb <- tibble(model = "XGBoost",
+                          preds = vector("list", 1))
+  
+  tibble_2_DMatrix <- function(x) {
+    xgb.DMatrix(data = data.matrix(x %>% select(-Qmax)),
+                label = x$Qmax)
+  }
+  
+  preds_tes_xgb$preds[[1]] <-
+    lapply(test_cases_te, function(x)
+      predict(xgb_model, x %>% tibble_2_DMatrix)) %>%
+    unlist()
   
   # Background --------------------------------------------------------------
   
   event_info <- get_event_info(eval_grid)
   
-  load("./mt_results/rain_mt.Rda")
+  load("./mt_results/mr1_mt.Rda")
   
   data_gof <- eval_grid %>%
     select(region, season, iter, gof_result) %>%
@@ -201,7 +204,8 @@ random_figure <- function(ii,
            model = factor(model, levels = model_order))
   
   build_backgroud_df <- function(base_prediction_y, model) {
-    base_prediction_x <- 100
+    base_prediction_x <-
+      100 # the prediction of 100% of the original pp is interested
     
     inconsistent_1 <- data.frame(
       x = c(base_prediction_x, base_prediction_x, Inf, Inf),
@@ -211,7 +215,7 @@ random_figure <- function(ii,
     
     inconsistent_2 <-
       data.frame(
-        x = c(base_prediction_x, base_prediction_x,-Inf,-Inf),
+        x = c(base_prediction_x, base_prediction_x, -Inf, -Inf),
         y = c(base_prediction_y, Inf, Inf, base_prediction_y),
         model = rep(model, 4)
       )
@@ -225,23 +229,24 @@ random_figure <- function(ii,
     
     consistent_2 <-
       data.frame(
-        x = c(base_prediction_x, base_prediction_x,-Inf,-Inf),
+        x = c(base_prediction_x, base_prediction_x, -Inf, -Inf),
         y = c(base_prediction_y, 0, 0, base_prediction_y),
         model = rep(model, 4)
       )
     
     inconclusive <- data.frame(
-      x = c(Inf, Inf,-Inf,-Inf),
-      y = c(0,-Inf,-Inf, 0),
+      x = c(Inf, Inf, -Inf, -Inf),
+      y = c(0, -Inf, -Inf, 0),
       model = rep(model, 4)
     )
     
     invalid <- data.frame(
-      x = c(-Inf,-Inf, Inf, Inf),
-      y = c(-Inf, Inf, Inf,-Inf),
+      x = c(-Inf, -Inf, Inf, Inf),
+      y = c(-Inf, Inf, Inf, -Inf),
       model = rep(model, 4)
     )
     
+    # if the prediction of the interested event is valid, i.e., >=0
     out1 <- list(
       inconsistent_1 = inconsistent_1,
       inconsistent_2 = inconsistent_2,
@@ -250,6 +255,7 @@ random_figure <- function(ii,
       inconclusive = inconclusive
     )
     
+    # if the prediction of the interested event is invalid, i.e., <=0
     out2 <- list(invalid = invalid)
     
     if (base_prediction_y >= 0) {
@@ -259,8 +265,8 @@ random_figure <- function(ii,
     }
   }
   
-  backgroud_dfs <-
-    vector("list", levels(data_plot$model) %>% length())
+  
+  backgroud_dfs <- vector("list", length(levels(data_plot$model)))
   for (i in 1:length(backgroud_dfs)) {
     model_name <- levels(data_plot$model)[i]
     base_prediction_y <- data_plot %>%
@@ -311,11 +317,8 @@ random_figure <- function(ii,
     bind_rows(inconclusive) %>%
     bind_rows(invalid) %>%
     mutate(
-      model = factor(
-        model,
-        levels = model_order,
-        labels = replace(model_order, model_order == "CART", "CARTBag")
-      ),
+      model = factor(model,
+                     levels = model_order),
       outcome = factor(
         outcome,
         levels = c("Invalid", "Inconclusive test", "Inconsistent", "Consistent")
@@ -323,22 +326,16 @@ random_figure <- function(ii,
     )
   
   observed_df <- tibble(
-    model = factor(
-      model_order,
-      levels = model_order,
-      labels = replace(model_order, model_order == "CART", "CARTBag")
-    ),
+    model = factor(model_order,
+                   levels = model_order),
     x = 100,
     y = event_info$Qmax,
     dummy = "Observed value"
   )
   
   data_plot <- data_plot %>%
-    mutate(model = factor(
-      model,
-      levels = model_order,
-      labels = replace(model_order, model_order == "CART", "CARTBag")
-    ))
+    mutate(model = factor(model,
+                          levels = model_order))
   
   n_outcome_presented <-
     backgroud_df$outcome %>% unique() %>% length()
@@ -359,7 +356,7 @@ random_figure <- function(ii,
         shape = 4,
         size = 2
       ) +
-      facet_wrap( ~ model) +
+      facet_wrap(~ model) +
       scale_fill_manual(values = c("#ffbcb2",
                                    "#d0d0d0",
                                    "#ffc374",
@@ -390,7 +387,7 @@ random_figure <- function(ii,
         shape = 4,
         size = 2
       ) +
-      facet_wrap( ~ model) +
+      facet_wrap(~ model) +
       scale_fill_manual(values = c("#d0d0d0",
                                    "#ffc374",
                                    "#a3d977")) +
@@ -405,14 +402,14 @@ random_figure <- function(ii,
       theme(legend.position = "top")
   }
   
-  fname <- paste0("./mt_results/example_illustration_", ii, ".png")
+  fname <- paste0("./paper_figures/example_illustration_", ii, ".jpg")
   ggsave(
     p,
     filename = fname,
     width = 7,
     height = 5.5,
     units = "in",
-    dpi = 600
+    dpi = 300
   )
   
   event_info
@@ -435,8 +432,9 @@ for (i in 1:n_exp) {
   event_info[[i]] <-
     random_figure(i, row_of_interest, id_of_interested_event)
   
-  cat(i)
+  cat(i, "\n")
 }
+
 
 save(event_info, row_of_interests, id_of_interested_events, file = "./mt_results/random_figure_config.Rda")
 

@@ -31,10 +31,10 @@ pacman::p_load(
 
 
 # load data
-load("./mt_results/rain_mt.Rda")
+load("./mt_results/mr1_mt.Rda")
 eval_grid_mr1 <- eval_grid
 
-load('./mt_results/pet_mt.Rda')
+load('./mt_results/mr2_mt.Rda')
 eval_grid_mr2 <- eval_grid
 
 load("./mt_results/mr3_mt.Rda")
@@ -165,20 +165,12 @@ ggplot(data_plot %>% filter(season == "Summer"), aes(model, value)) +
   )
 
 ggsave(
-  filename = "./paper_figures/figure11.png",
+  filename = "./paper_figures/Figure11.png",
   width = 7,
   height = 5.5,
   units = "in",
   dpi = 600
 )
-
-ggsave(
-  filename = "./paper_figures/figure11.pdf",
-  width = 7,
-  height = 5.5,
-  units = "in"
-)
-
 
 
 # Plot supporting info ----------------------------------------------------
@@ -200,18 +192,10 @@ ggplot(data_plot %>% filter(season == "Winter"), aes(model, value)) +
   )
 
 ggsave(
-  filename = "./paper_figures/figure_S10.png",
+  filename = "./paper_figures/Figure_S10.png",
   width = 7,
   height = 5.5,
   units = "in",
   dpi = 600
 )
-
-ggsave(
-  filename = "./paper_figures/figure_S10.pdf",
-  width = 7,
-  height = 5.5,
-  units = "in"
-)
-
 

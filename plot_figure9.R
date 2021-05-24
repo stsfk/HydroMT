@@ -29,13 +29,13 @@ pacman::p_load(
 
 # data --------------------------------------------------------------------
 
-load("./mt_results/rain_mt.Rda")
+load("./mt_results/mr1_mt.Rda")
 p_eval_grid <- eval_grid
 
-load("./mt_results/pet_mt.Rda")
+load("./mt_results/mr2_mt.Rda")
 pet_eval_grid <- eval_grid
 
-load("./mt_results/p_pet_mt.Rda")
+load("./mt_results/mr1_mr2_mt.Rda")
 p_pet_eval_grid <- eval_grid
 
 data_gof <- eval_grid %>%
@@ -163,7 +163,7 @@ data_plot <- p %>%
       levels = c("S", "W"),
       labels = c("Summer", "Winter")
     ),
-    model = factor(model, levels = model_order, labels =  replace(model_order, model_order == "CART", "CARTBag"))
+    model = factor(model, levels = model_order)
   )
 
 lab <- c(expression(MR[1]),
@@ -204,20 +204,12 @@ ggplot(data_plot %>% filter(season == "Summer"), aes(item, value)) +
   )
 
 ggsave(
-  filename = "./paper_figures/figure9.png",
+  filename = "./paper_figures/Figure9.png",
   width = 7,
   height = 4.8,
   units = "in",
   dpi = 600
 )
-
-ggsave(
-  filename = "./paper_figures/figure9.pdf",
-  width = 7,
-  height = 4.8,
-  units = "in"
-)
-
 
 # Plot supporting figure --------------------------------------------------
 
@@ -254,21 +246,10 @@ ggplot(data_plot %>% filter(season == "Winter"), aes(item, value)) +
   )
 
 ggsave(
-  filename = "./paper_figures/figure_S8.png",
+  filename = "./paper_figures/Figure_S8.png",
   width = 7,
   height = 4.8,
   units = "in",
   dpi = 600
 )
-
-ggsave(
-  filename = "./paper_figures/figure_S8.pdf",
-  width = 7,
-  height = 4.8,
-  units = "in"
-)
-
-
-
-
 

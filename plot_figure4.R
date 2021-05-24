@@ -24,15 +24,6 @@ pacman::p_load(
 )
 
 
-# Constant ----------------------------------------------------------------
-
-old_model_names <-
-  c("CART")
-
-new_model_names <-
-  c("CARTBag")
-
-
 # Data --------------------------------------------------------------------
 
 load("./mt_results/mr1_mt.Rda")
@@ -52,8 +43,7 @@ data_plot <- eval_grid %>%
       season,
       levels = c("W", "S"),
       labels = c("Winter", "Summer")
-    ),
-    model = plyr::mapvalues(model, old_model_names, new_model_names)
+    )
   )
 
 model_order <- data_plot %>%
@@ -92,11 +82,4 @@ ggsave(
   height = 5.5,
   units = "in",
   dpi = 600
-)
-
-ggsave(
-  filename = "./paper_figures/Figure4.pdf",
-  width = 7,
-  height = 5.5,
-  units = "in"
 )

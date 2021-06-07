@@ -126,7 +126,8 @@ for (i in 1:nrow(eval_grid)) {
 }
 
 
-# Rain MT -----------------------------------------------------------------
+# MR1 Precipitation -------------------------------------------------------
+
 
 prep_data_mutation <- function(df,
                                col_names,
@@ -147,11 +148,11 @@ prep_data_mutation <- function(df,
   df
 }
 
-rain_mt <- function(x, x_low, x_high) {
+pp_mt <- function(x, x_low, x_high) {
   # Function to conduct MT based assessment.
   # "x" is the vector of predictions for the event of interest.
-  # "x_low" is the vector of predictions for the event with a lower precipitation magnitude.
-  # "x_high" is the vector of predictions for the event with a higher precipitation magnitude.
+  # "x_low" is the vector of predictions for the events with lower precipitation magnitudes.
+  # "x_high" is the vector of predictions for the events with higher precipitation magnitudes.
   # Assessment outcome:
   # inconclusive test = 1, invalid = 2, inconsistent = 3, consistent = 4
   
@@ -212,7 +213,7 @@ for (i in 1:nrow(eval_grid)) {
   names(models) <-
     plyr::mapvalues(names(models), old_model_names, new_model_names)
   
-  # construct test cases
+  # construct inputs from the training and the test set for assessment.
   # "test_cases_te": inputs derived from the events of the test set.
   # "test_cases_tr": inputs derived from the events of the training set.
   # Variables of "col_names" are changed to between 49% and 151% of the original values.
@@ -258,10 +259,10 @@ for (i in 1:nrow(eval_grid)) {
     for (k in 2:(length(preds_te) - 1)) {
       # multiple assignment, 3 elements of the predictions are selected.
       c(x_low, x, x_high) %<-% preds_te[(k - 1):(k + 1)]
-      mt_te[[k - 1]] <- rain_mt(x, x_low, x_high)
+      mt_te[[k - 1]] <- pp_mt(x, x_low, x_high)
       
       c(x_low, x, x_high) %<-% preds_tr[(k - 1):(k + 1)]
-      mt_tr[[k - 1]] <- rain_mt(x, x_low, x_high)
+      mt_tr[[k - 1]] <- pp_mt(x, x_low, x_high)
     }
     
     # Store the result for each ML model.
@@ -290,10 +291,10 @@ for (i in 1:nrow(eval_grid)) {
   
   for (k in 2:(length(preds_te) - 1)) {
     c(x_low, x, x_high) %<-% preds_te[(k - 1):(k + 1)]
-    mt_te[[k - 1]] <- rain_mt(x, x_low, x_high)
+    mt_te[[k - 1]] <- pp_mt(x, x_low, x_high)
     
     c(x_low, x, x_high) %<-% preds_tr[(k - 1):(k + 1)]
-    mt_tr[[k - 1]] <- rain_mt(x, x_low, x_high)
+    mt_tr[[k - 1]] <- pp_mt(x, x_low, x_high)
   }
   
   mt_tes$XGBoost <- mt_te

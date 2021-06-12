@@ -214,9 +214,9 @@ for (i in 1:nrow(eval_grid)) {
   uniqe_ratios[[i]] <- sum(qmax_table == 1)/length(qmax_table)
 }
 
-max(1 - uniqe_ratios) # which is 5% have no unique values
+max(1 - uniqe_ratios) # which is at most 5% of the observations have non-unique values
 # assume the 5% observations all have the same prediction 
-# Among the 743 samples, 32 have non-unique values
+# In region 3 winter flood model iteration 5, among the 743 samples of the test set, 32 have non-unique values
 # Assume all the 32 non-unique observations are the same
 # they correspond to C(32,2) = 496 assessments
 # and the total number of possible assessments is C(743, 2) = 275653

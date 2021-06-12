@@ -20,10 +20,8 @@ pacman::p_load(
   randomForest,
   ParBayesianOptimization,
   xgboost,
-  lemon,
-  ggrepel
+  hydroGOF
 )
-
 
 # Constant ----------------------------------------------------------------
 
@@ -39,8 +37,7 @@ old_model_names <-
     "CubistFit"  ,
     "SVMFit"    ,
     "svmRadialFit" ,
-    "RFFit"       ,
-    "XGBoost"
+    "RFFit"
   )
 
 new_model_names <-
@@ -50,18 +47,20 @@ new_model_names <-
     "PLS",
     "Ridge",
     "Lasso",
-    "CART",
+    "CARTBag",
     "KNN",
     "Cubist",
     "SVMPoly",
     "SVMRadial",
-    "RF",
-    "XGBoost"
+    "RF"
   )
+
 
 
 # Data --------------------------------------------------------------------
 
+#   eval_grid: Tibble of region, season, iteration number, name of the file storing the model 
+# raining example, and XGBoost model. "gof_result" stores the goodness of fit results on the test datasets.
 eval_grid <- expand.grid(
   region = c(1:4),
   season = c("S", "W"),
@@ -92,22 +91,26 @@ eval_grid <- expand.grid(
 
 
 for (i in 1:nrow(eval_grid)) {
-  # gof of all models except xgboost
+  # load the file store the model training results. "models" stores the model training results.
   load(eval_grid$file_name[i])
   
+  # "df1" stores goodness-of-fit (gof) measured by R2 of all models except XGBoost
   df1 <-
     sapply(models, function(x)
       hydroGOF::gof(predict(x, dtest), dtest$Qmax, digits = 8)[17]) %>%
     as_tibble() %>%
     mutate(model = names(models))
   
-  # gof of xgboost model
+  # gof of XGBoost
+  # Convert "dtest" to xgb.DMatrix format
   xgb_dtest <-
     xgb.DMatrix(data = data.matrix(dtest %>% select(-Qmax)),
                 label = dtest$Qmax)
   
+  # load XGBoost
   xgb_model <- xgboost::xgb.load(eval_grid$xgb_file_name[i])
   
+  # "df2" stores goodness-of-fit (gof) measured by R2 of XGBoost
   df2 <- tibble(model = "XGBoost",
                 value = hydroGOF::gof(
                   sim = predict(xgb_model, xgb_dtest),
@@ -115,7 +118,7 @@ for (i in 1:nrow(eval_grid)) {
                   digits = 8
                 )[17])
   
-  # return
+  # Combine "df1" and "df2" and put it into "eval_grid"; Change model name to new names
   eval_grid$gof_result[[i]] <- bind_rows(df1, df2) %>%
     dplyr::rename(r2 = value) %>%
     dplyr::select(model, r2) %>%
@@ -123,17 +126,18 @@ for (i in 1:nrow(eval_grid)) {
 }
 
 
+# MR3 - relation between predicted values for different samples --------
 
-# Original sample MT ------------------------------------------------------
-
+# add columns to "eval_grid" to store the results for the test set.
 eval_grid <- eval_grid %>%
-  mutate(org_mt = vector("list", 1))
+  mutate(mt_tes = vector("list", 1))
 
-consist_rate <- function(model, dtest, xgboost_format = F){
-  # Input: 
-  # Output: consistent rate
+
+compute_consist_rate <- function(model, dtest, xgboost_format = F){
+  # Input: model, dtest: test set, xgboost_format:whether the test set is coverted into xgb.DMatrix
+  # Output: consistent rate, i.e., 
   
-  # number of test
+  # number of tests for each sample, i.e., number of samples - 1
   n_tests <- nrow(dtest) - 1
   
   # get observation and prediction
@@ -149,161 +153,76 @@ consist_rate <- function(model, dtest, xgboost_format = F){
     prediction <- predict(model, dtest)
   }
   
-  # get only valid predictions
+  # get only valid predictions and the corresponding observations, this is to speed-up the computation
+  # so the number of "invalid" and "inconclusive test" cases do not need to be counted 
   valid_index <- (prediction >= 0)
   observation <- observation[valid_index]
   prediction <- prediction[valid_index] 
   
-  # compute the number of consistent predictions
-  n_consistents <- vector("double", length(prediction))
+  # compute the number of consistent predictions for each sample
+  # the number of consistent outcome when a sample is used in prediction of each sample
+  n_consistents <- vector("double", length(prediction)) 
   for (i in 1:length(prediction)){
-    n_inconsisitent <- ((prediction[i] - prediction)*(observation[i] - observation) < 0) %>% sum() # compute n_inconsistent first
+    # compute n_inconsistent first; 
+    # (prediction[i] - prediction) is the difference between the prediction of the event of interest -- prediction[i] 
+    #  and that of the other samples;
+    # (observation[i] - observation) is the difference between the observation of the event of interest --observation[i] 
+    # and that of the other samples;
+    # if (prediction[i] - prediction[j])*(observation[i] - observation[j]) < 0, then prediction[i] is inconsistent when
+    # prediction[j] is used as the follow-up input;
+    # in rare cases that observation[i] = observation[j], any valid prediction is considered consistent 
+    n_inconsisitent <- ((prediction[i] - prediction)*(observation[i] - observation) < 0) %>% sum() 
     n_consistents[i] <- length(prediction) - n_inconsisitent - 1 # total - inconsistent - self
   }
   
   # output, the average consistent rate of valid predictions 
+  # "/n_tests" is the number of all possible assessment for each sample
   out <- (n_consistents/n_tests) %>%
     mean()
   
-  # reduction factor, in cases that an invalid prediction is picked
-  out*length(prediction)/(n_tests + 1)
+  # the average consistent rate computed for all samples
+  out*length(prediction)/nrow(dtest)
 }
 
 for (i in 1:nrow(eval_grid)) {
-  # gof of all models except xgboost
+  # consistent rate of predictions of all models except xgboost
   load(eval_grid$file_name[i])
+  df1 <- sapply(models, compute_consist_rate, dtest, xgboost_format = F)
   
-  df1 <- sapply(models, consist_rate, dtest, xgboost_format = F)
-  
-  # gof of xgboost model
+  # consistent rate of predictions of xgboost model
   xgb_model <- xgboost::xgb.load(eval_grid$xgb_file_name[i])
-  
-  df2 <- consist_rate(xgb_model, dtest, xgboost_format=T)
+  df2 <- compute_consist_rate(xgb_model, dtest, xgboost_format=T)
   
   # assign result
-  eval_grid$org_mt[[i]] <- tibble(
+  eval_grid$mt_tes[[i]] <- tibble(
     model = c(names(df1), "XGBoost"),
-    org_consistent_rate = c(df1, df2))%>%
+    consistent_rate = c(df1, df2))%>%
     mutate(model = plyr::mapvalues(model, old_model_names, new_model_names))
 }
 
 save(eval_grid, file = "./mt_results/mr3_mt.Rda")
 
-# Plot --------------------------------------------------------------------
-data_gof <- eval_grid %>%
-  select(region, season, iter, gof_result) %>%
-  unnest(gof_result)
 
-model_order <- data_gof %>%
-  group_by(model) %>%
-  dplyr::summarise(mean_gof = mean(r2)) %>%
-  arrange(desc(mean_gof)) %>%
-  pull(model)
-
-data_plots <- vector("list", nrow(eval_grid))
-for (i in 1:length(data_plots)){
-  data_plots[[i]] <- eval_grid$gof_result[[i]] %>%
-    left_join(eval_grid$org_mt[[i]],  by = "model") %>%
-    mutate(region = eval_grid$region[[i]],
-           season = eval_grid$season[[i]],
-           iter = eval_grid$iter[[i]])
+# Ratio of observations with non-unique observations ----------------------
+uniqe_ratios <- rep(0, nrow(eval_grid))
+for (i in 1:nrow(eval_grid)) {
+  # consistent rate of predictions of all models except xgboost
+  load(eval_grid$file_name[i])
+  
+  qmax_table <- table(dtest$Qmax) %>% unname()
+  
+  uniqe_ratios[[i]] <- sum(qmax_table == 1)/length(qmax_table)
 }
 
-data_plot <- data_plots %>%
-  bind_rows() %>%
-  mutate(
-    region = factor(
-      region,
-      levels = c(1:4),
-      labels = str_c("Region ", 1:4)
-    ),
-    season = factor(
-      season,
-      levels = c("S", "W"),
-      labels = c("Summer", "Winter")
-    ),
-    model = factor(model, levels = model_order)
-  )
-
-
-data_plot2 <- data_plot %>%
-  group_by(region, season, model) %>%
-  dplyr::summarise(
-    mean_consistent_rate = mean(org_consistent_rate),
-    min_consistent_rate = min(org_consistent_rate),
-    max_consistent_rate = max(org_consistent_rate),
-    mean_gof = mean(r2),
-    max_gof = max(r2),
-    min_gof = min(r2)
-  )
-
-data_plot3 <- data_plot2 
-
-
-
-
-
-ggplot() +
-  geom_point(
-    data = data_plot,
-    aes(x = r2, y = org_consistent_rate, color = model),
-    size = 1,
-    alpha = 0.5
-  ) +
-  geom_errorbar(
-    data = data_plot2,
-    aes(
-      x = mean_gof,
-      y = mean_consistent_rate,
-      ymin = min_consistent_rate,
-      ymax = max_consistent_rate,
-      color = model
-    ),
-    size = 0.5
-  ) +
-  geom_errorbar(
-    data = data_plot2,
-    aes(
-      x = mean_gof,
-      y = mean_consistent_rate,
-      xmin = min_gof,
-      xmax = max_gof,
-      color = model
-    ),
-    size = 0.5
-  ) +
-  geom_text_repel(
-    data = data_plot3,
-    aes(
-      label = data_plot3$model %>% as.character(),
-      x = mean_gof,
-      y = mean_consistent_rate,
-    ),
-    max.iter = 500000,
-    force = 100,
-    xlim = c(0.2, 1),
-    size = 2,
-    segment.size = 0.18,
-    max.overlaps = 12
-  ) +
-  scale_x_continuous(limits = c(0.2, 1),
-                     breaks = c(0.2, 0.4, 0.6, 0.8, 1))+
-  scale_color_discrete() +
-  facet_grid(season ~ region)+
-  labs(y = expression(Consistent~rate~(MR[3])),
-       x = "R²",
-       color = "Model") +
-  theme_bw(base_size = 10)+
-  theme(strip.background = element_rect(fill = "grey80", size = 0))
-
-ggsave(
-  filename = "./mt_results/GoF_vs_org_consistent_rate.png",
-  width = 7,
-  height = 5.5,
-  units = "in",
-  dpi = 600
-)
-
+max(1 - uniqe_ratios) # which is 5% have no unique values
+# assume the 5% observations all have the same prediction 
+# Among the 743 samples, 32 have non-unique values
+# Assume all the 32 non-unique observations are the same
+# they correspond to C(32,2) = 496 assessments
+# and the total number of possible assessments is C(743, 2) = 275653
+496/275653 = 0.001799364
+# That is, relaxing the requirement for events with non-unique value prediction 
+# can only affects a few small portion of the assessments.
 
 
 

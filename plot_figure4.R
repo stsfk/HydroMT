@@ -26,10 +26,13 @@ pacman::p_load(
 
 # Data --------------------------------------------------------------------
 
+# The goodness-of-fit of the models has been calculated duirng the MT experiments.
 load("./mt_results/mr1_mt.Rda")
 
 # Plot --------------------------------------------------------------------
 
+# Select the gof result and relevant columns for plotting; 
+# labeling the regions and the seasons
 data_plot <- eval_grid %>%
   unnest(gof_result) %>%
   select(region, season, iter, model, r2) %>%
@@ -46,6 +49,8 @@ data_plot <- eval_grid %>%
     )
   )
 
+# compute the rank of the model in terms of r2
+# label the r2 results
 model_order <- data_plot %>%
   group_by(model) %>%
   dplyr::summarise(mean = mean(r2)) %>%
@@ -53,6 +58,7 @@ model_order <- data_plot %>%
   mutate(mean = sprintf("%.2f", round(mean, 2)),
          label = paste0(model, "\n", "mean=", mean))
 
+# ordering the models according to r2
 data_plot <- data_plot %>%
   mutate(model = factor(model, levels = model_order$model, labels = model_order$label))
 

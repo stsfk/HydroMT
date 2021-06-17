@@ -33,66 +33,78 @@ if (!dir.exists(dir_path)){
 }
 
 
-# Rain MT -----------------------------------------------------------------
+# MR1 results -------------------------------------------------------------
 
+# "mr1_mt.Rda" stores the results of experiments with MR1
 load("./mt_results/mr1_mt.Rda")
 
-# model's GOF and consistent rate
-
-get_consistent_rate <- function(x) {
+# model's goodness-of-fit (gof) and consistent rate
+get_consistency_rate <- function(x) {
+  # Consistent assessment results are labeled with "4"
   (sum(x == 4)) / length(x)
 }
 
+# The assessments of the experiment is stored in "eval_grid"
+# consistency_rate_tes: consistent rate for test sets
+# consistency_rate_trs: consistent rate for training sets
 eval_grid <- eval_grid %>%
   mutate(
-    consistent_rate_tes = vector("list", 1),
-    consistent_rate_trs = vector("list", 1)
+    consistency_rate_tes = vector("list", 1),
+    consistency_rate_trs = vector("list", 1)
   )
 
-# iterate over region, season, data splits
+# Evaluate each row of "eval_grid"; iterate over region, season, data splits
 for (i in 1:nrow(eval_grid)) {
+  # The assessment results for training and test set are stored in "mt_trs" and "mt_tes".
   mt_trs <- eval_grid$mt_trs[[i]]
   mt_tes <- eval_grid$mt_tes[[i]]
   
   # iteration over machine learning methods
-  consistent_rate_tr <- tibble(model = names(mt_trs),
-                               consistent_rate = vector("list", 1))
-  consistent_rate_te <- consistent_rate_tr
+  # "consistency_rate_tr" and "consistency_rate_te" store the consistency rate of each ML method for on row of eval_grid
+  consistency_rate_tr <- tibble(model = names(mt_trs),
+                               consistency_rate = vector("list", 1))
+  consistency_rate_te <- tibble(model = names(mt_tes),
+                               consistency_rate = vector("list", 1))
   
   for (j in 1:length(mt_trs)) {
+    # iterate over ML methods
     mt_te <- mt_tes[[j]]
     mt_tr <- mt_trs[[j]]
     
-    consistent_rate_te$consistent_rate[[j]] <-
-      sapply(mt_te, get_consistent_rate)
-    consistent_rate_tr$consistent_rate[[j]] <-
-      sapply(mt_tr, get_consistent_rate)
+    consistency_rate_te$consistency_rate[[j]] <-
+      sapply(mt_te, get_consistency_rate)
+    consistency_rate_tr$consistency_rate[[j]] <-
+      sapply(mt_tr, get_consistency_rate)
   }
   
-  eval_grid$consistent_rate_tes[[i]] <- consistent_rate_te
-  eval_grid$consistent_rate_trs[[i]] <- consistent_rate_tr
+  eval_grid$consistency_rate_tes[[i]] <- consistency_rate_te
+  eval_grid$consistency_rate_trs[[i]] <- consistency_rate_tr
 }
 
-
+# extract goodness-of-fit (gof) results from "eval_grid"
 data_gof <- eval_grid %>%
   select(region, season, iter, gof_result) %>%
   unnest(gof_result)
 
+# order model according to r2
 model_order <- data_gof %>%
   group_by(model) %>%
   dplyr::summarise(mean_gof = mean(r2)) %>%
   arrange(desc(mean_gof)) %>%
   pull(model)
 
+# "data_plot": compute the mean consistency rate of the all experiment with respect to MR1 associated with test sets;
+# join "data_gof", which stores the gof results of each model on the test sets;
+# ordering and labeling the variables for plotting.
 data_plot <- eval_grid %>%
-  select(region, season, iter, consistent_rate_tes) %>%
-  unnest(cols = consistent_rate_tes) %>%
-  mutate(mean_consistent_rate = map_dbl(consistent_rate, function(x)
+  select(region, season, iter, consistency_rate_tes) %>%
+  unnest(cols = consistency_rate_tes) %>%
+  mutate(mean_consistency_rate = map_dbl(consistency_rate, function(x)
     unlist(mean(x)))) %>%
   left_join(data_gof, by = c("region", "season", "iter", "model")) %>%
-  dplyr::select(-consistent_rate) %>%
+  dplyr::select(-consistency_rate) %>% # drop the column that stores the detailed results; "mean_consistency_rate" is enough for plotting
   dplyr::rename(gof = r2,
-                consistent_rate = mean_consistent_rate) %>%
+                consistency_rate = mean_consistency_rate) %>%
   mutate(
     region = factor(
       region,
@@ -110,54 +122,57 @@ data_plot <- eval_grid %>%
     )
   )
 
+# "data_plot2" stores the results on the ranges of the consistency_rate and gof; for making the lines/bar on the plot 
 data_plot2 <- data_plot %>%
   group_by(region, season, model) %>%
   dplyr::summarise(
-    mean_consistent_rate = mean(consistent_rate),
-    min_consistent_rate = min(consistent_rate),
-    max_consistent_rate = max(consistent_rate),
+    mean_consistency_rate = mean(consistency_rate),
+    min_consistency_rate = min(consistency_rate),
+    max_consistency_rate = max(consistency_rate),
     mean_gof = mean(gof),
     max_gof = max(gof),
     min_gof = min(gof)
   )
 
-data_plot3 <- data_plot2 #%>%
-
+# Making the plot using ggplot2; gof vs consistency rate with respect to MR1
+# show the results of each model for each region, season, outer CV iteration using points;
+# the average results are shown using bars and lines;
+# for easy indentification, the models are labeled using text
 p <- ggplot() +
   geom_point(
     data = data_plot,
-    aes(x = gof, y = consistent_rate, color = model),
+    aes(x = gof, y = consistency_rate, color = model),
     size = 1,
     alpha = 0.5
-  ) +
+  ) + # the vertical bars
   geom_errorbar(
     data = data_plot2,
     aes(
       x = mean_gof,
-      y = mean_consistent_rate,
-      ymin = min_consistent_rate,
-      ymax = max_consistent_rate,
+      y = mean_consistency_rate,
+      ymin = min_consistency_rate,
+      ymax = max_consistency_rate,
       color = model
     ),
     size = 0.5
-  ) +
+  ) + # the horizontal lines
   geom_errorbar(
     data = data_plot2,
     aes(
       x = mean_gof,
-      y = mean_consistent_rate,
+      y = mean_consistency_rate,
       xmin = min_gof,
       xmax = max_gof,
       color = model
     ),
     size = 0.5
-  ) +
+  ) + # to avoid overlap, the positions of the text labels are estimated multiple times ("max.iter")
   geom_text_repel(
-    data = data_plot3,
+    data = data_plot2,
     aes(
-      label = data_plot3$model %>% as.character(),
+      label = data_plot2$model %>% as.character(),
       x = mean_gof,
-      y = mean_consistent_rate,
+      y = mean_consistency_rate,
     ),
     max.iter = 1000000,
     force = 100,
@@ -179,6 +194,7 @@ p <- ggplot() +
   theme(legend.position = "right",
         strip.background = element_rect(fill = "grey80", size = 0))
 
+# save the plot to file
 ggsave(
   p,
   filename = "./paper_figures/Figure6.png",

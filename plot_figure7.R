@@ -137,7 +137,8 @@ data_plot <- eval_grid %>%
   unnest(consistency_rate_distribution) %>%
   mutate(model = factor(model, levels = model_order))
 
-# prepare data for summer flood events
+# Plot summer floods ------------------------------------------------------
+
 data_plot2 <- data_plot %>%
   dplyr::filter(region %in% c(1:4),
                 season %in% c("S"))%>%

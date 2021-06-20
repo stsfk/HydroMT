@@ -20,64 +20,107 @@ pacman::p_load(
   randomForest,
   ParBayesianOptimization,
   xgboost,
-  lemon,
   twosamples
 )
 
 # Data --------------------------------------------------------------------
 
+# Load the assessment results with respect MR1
 load("./mt_results/mr1_mt.Rda")
 
 
-# Plot --------------------------------------------------------------------
+# Function ----------------------------------------------------------------
 
 
-get_consistent_rate <- function(x) {
+# The consistent assessment result is labelled as 4
+get_consistency_rate <- function(x) {
   (sum(x == 4)) / length(x)
 }
 
-get_consistent_rate_per_event <- function(xs) {
-  m <-
-    xs %>% unlist() %>% matrix(nrow = length(xs), byrow = T) # num of mt * num of flood events
+# compute the consistency rate associated with a sample from the training or the test set
+get_consistency_rate_per_event <- function(xs) {
+  # xs: a list that store the assessment result of a model during a outer CV iteration
   
-  apply(m, 2, get_consistent_rate)
+  m <- xs %>% 
+    unlist() %>% 
+    matrix(nrow = length(xs), byrow = T) # row: different variations from the original events; col: different events
+  
+  apply(m, 2, get_consistency_rate) # compute the mean consistency rate associated with each event
 }
 
+dist_test <- function(data_test1,
+                      data_test2,
+                      confidence_level = 0.05) {
+  
+  # wrapper to perform two-sample Cramer-von Mises Test
+  test_result <- cvm_test(data_test1, data_test2)
+  
+  if (test_result[2] <= confidence_level) {
+    "reject H0"
+  } else {
+    "fail to reject H0"
+  }
+}
+
+dist_test_df <- function(df) {
+  # extract data from training and the test sets and perform two-sample Cramer-von Mises Test
+  data_test1 <- df %>%
+    dplyr::filter(case == "Test set") %>%
+    pull(consistency_rate_distribution)
+  
+  data_test2 <- df %>%
+    dplyr::filter(case == "Training set") %>%
+    pull(consistency_rate_distribution)
+  
+  dist_test(data_test1, data_test2)
+}
+
+# Plot --------------------------------------------------------------------
+
+# add a column "consistency_rate_distribution" to "eval_grid" to store the average consistency rates
 eval_grid <- eval_grid %>%
-  mutate(consistent_dis = vector("list", 1))
+  mutate(consistency_rate_distribution = vector("list", 1))
 
 # iterate over region, season, data splits
 for (i in 1:nrow(eval_grid)) {
+  # iterate over the rows of eval_grid, which is an outer CV iteration for a regional-season dataset
+  
   mt_trs <- eval_grid$mt_trs[[i]]
   mt_tes <- eval_grid$mt_tes[[i]]
   
-  # iteration over machine learning methods
-  consistent_dis_tr <- tibble(model = names(mt_trs),
-                              consistent_dis = vector("list", 1))
-  consistent_dis_te <- consistent_dis_tr
+  # iteration over machine learning methods; "consistency_rate_distribution_tr" is the result for training set
+  # "consistency_rate_distribution_te" is the result for test set
+  consistency_rate_distribution_tr <- tibble(model = names(mt_trs),
+                                             consistency_rate_distribution = vector("list", 1))
+  consistency_rate_distribution_te <- tibble(model = names(mt_tes),
+                                             consistency_rate_distribution = vector("list", 1))
   
   for (j in 1:length(mt_trs)) {
     mt_te <- mt_tes[[j]]
     mt_tr <- mt_trs[[j]]
     
-    consistent_dis_te$consistent_dis[[j]] <-
-      get_consistent_rate_per_event(mt_te)
-    consistent_dis_tr$consistent_dis[[j]] <-
-      get_consistent_rate_per_event(mt_tr)
+    consistency_rate_distribution_te$consistency_rate_distribution[[j]] <-
+      get_consistency_rate_per_event(mt_te)
+    consistency_rate_distribution_tr$consistency_rate_distribution[[j]] <-
+      get_consistency_rate_per_event(mt_tr)
   }
   
-  consistent_dis_te <- consistent_dis_te %>%
-    unnest(consistent_dis) %>%
+  consistency_rate_distribution_te <- consistency_rate_distribution_te %>%
+    unnest(consistency_rate_distribution) %>%
     mutate(case = "Test set")
   
-  consistent_dis_tr <- consistent_dis_tr %>%
-    unnest(consistent_dis) %>%
+  consistency_rate_distribution_tr <- consistency_rate_distribution_tr %>%
+    unnest(consistency_rate_distribution) %>%
     mutate(case = "Training set")
   
-  eval_grid$consistent_dis[[i]] <- consistent_dis_te %>%
-    rbind(consistent_dis_tr)
+  eval_grid$consistency_rate_distribution[[i]] <- consistency_rate_distribution_te %>%
+    rbind(consistency_rate_distribution_tr)
 }
 
+# prepare data for piloting
+
+# "data_gof" save the goodness of fit results for ranking the models;
+# the results are stored in "model_order"
 data_gof <- eval_grid %>%
   select(region, season, iter, gof_result) %>%
   unnest(gof_result)
@@ -88,16 +131,13 @@ model_order <- data_gof %>%
   arrange(desc(mean_gof)) %>%
   pull(model)
 
+# combine all the result to a single table
 data_plot <- eval_grid %>%
-  select(region, season, iter, consistent_dis) %>%
-  unnest(consistent_dis)
-
-data_plot <- data_plot %>%
+  select(region, season, iter, consistency_rate_distribution) %>%
+  unnest(consistency_rate_distribution) %>%
   mutate(model = factor(model, levels = model_order))
 
-
-# plot summer
-
+# prepare data for summer flood events
 data_plot2 <- data_plot %>%
   dplyr::filter(region %in% c(1:4),
                 season %in% c("S"))%>%
@@ -105,55 +145,27 @@ data_plot2 <- data_plot %>%
   mutate(region = paste0("Region ", region))
 
 # K-S test
-
-dist_test <- function(data_test1,
-                      data_test2,
-                      confidence_level = 0.05) {
-  test_result <- cvm_test(data_test1, data_test2)
-  
-  if (test_result[2] <= confidence_level) {
-    "reject H[0]"
-  } else {
-    "fail to reject H[0]"
-  }
-}
-
-dist_test_df <- function(df) {
-  data_test1 <- df %>%
-    dplyr::filter(case == "Test set") %>%
-    pull(consistent_dis)
-  
-  data_test2 <- df %>%
-    dplyr::filter(case == "Training set") %>%
-    pull(consistent_dis)
-  
-  dist_test(data_test1, data_test2)
-}
-
+# split the tibble of all results to sub-tibbles of each outer CV iteration
 data_plot_dist_test <- data_plot2 %>%
   group_by(region, season, model) %>%
   group_split()
+
+# create a tibble to store the assessment result
 data_plot_dist_test_summary <-  data_plot_dist_test %>%
   lapply(function(x)
     x[1,]) %>%
   bind_rows() %>%
   mutate(test_result = "")
 
+# perform two-sample KS test; iterate over the outer CV iterations
 for (i in seq_along(data_plot_dist_test)) {
   data_plot_dist_test_summary$test_result[i] <-
     data_plot_dist_test[[i]] %>%
     dist_test_df()
 }
 
-data_plot_dist_test_summary2 <- data_plot_dist_test_summary %>%
-  mutate(test_result = replace(test_result, test_result == "reject H[0]", "reject H0")) %>%
-  mutate(test_result = replace(
-    test_result,
-    test_result == "fail to reject H[0]",
-    "fail to reject H0"
-  ))
-
-ggplot(data_plot2, aes(consistent_dis, fill = case)) +
+# histgram plot + text label
+ggplot(data_plot2, aes(consistency_rate_distribution, fill = case)) +
   geom_histogram(
     aes(y = 0.05 * ..density..),
     alpha = 0.5,
@@ -163,7 +175,7 @@ ggplot(data_plot2, aes(consistent_dis, fill = case)) +
     size = 0.05
   ) +
   geom_text(
-    data = data_plot_dist_test_summary2,
+    data = data_plot_dist_test_summary,
     aes(
       x = 0,
       y = 0.8,
@@ -176,7 +188,7 @@ ggplot(data_plot2, aes(consistent_dis, fill = case)) +
     parse = F
   ) +
   scale_color_manual(values = c("midnightblue", "indianred4"),
-                     guide = F) +
+                     guide = "none") +
   scale_y_continuous(breaks = c(0, 0.5, 1)) +
   facet_grid(model ~ region) +
   labs(
@@ -213,7 +225,7 @@ ggsave(
 
 
 
-# plot winter
+# Plot winter floods ------------------------------------------------------
 
 data_plot2 <- data_plot %>%
   dplyr::filter(region %in% c(1:4),
@@ -222,54 +234,27 @@ data_plot2 <- data_plot %>%
   mutate(region = paste0("Region ", region))
 
 # K-S test
-dist_test <- function(data_test1,
-                      data_test2,
-                      confidence_level = 0.05) {
-  test_result <- cvm_test(data_test1, data_test2)
-  
-  if (test_result[2] <= confidence_level) {
-    "reject H[0]"
-  } else {
-    "fail to reject H[0]"
-  }
-}
-
-dist_test_df <- function(df) {
-  data_test1 <- df %>%
-    dplyr::filter(case == "Test set") %>%
-    pull(consistent_dis)
-  
-  data_test2 <- df %>%
-    dplyr::filter(case == "Training set") %>%
-    pull(consistent_dis)
-  
-  dist_test(data_test1, data_test2)
-}
-
+# split the tibble of all results to sub-tibbles of each outer CV iteration
 data_plot_dist_test <- data_plot2 %>%
   group_by(region, season, model) %>%
   group_split()
+
+# create a tibble to store the assessment result
 data_plot_dist_test_summary <-  data_plot_dist_test %>%
   lapply(function(x)
     x[1,]) %>%
   bind_rows() %>%
   mutate(test_result = "")
 
+# perform two-sample KS test; iterate over the outer CV iterations
 for (i in seq_along(data_plot_dist_test)) {
   data_plot_dist_test_summary$test_result[i] <-
     data_plot_dist_test[[i]] %>%
     dist_test_df()
 }
 
-data_plot_dist_test_summary2 <- data_plot_dist_test_summary %>%
-  mutate(test_result = replace(test_result, test_result == "reject H[0]", "reject H0")) %>%
-  mutate(test_result = replace(
-    test_result,
-    test_result == "fail to reject H[0]",
-    "fail to reject H0"
-  ))
-
-ggplot(data_plot2, aes(consistent_dis, fill = case)) +
+# histgram plot + text label
+ggplot(data_plot2, aes(consistency_rate_distribution, fill = case)) +
   geom_histogram(
     aes(y = 0.05 * ..density..),
     alpha = 0.5,
@@ -279,7 +264,7 @@ ggplot(data_plot2, aes(consistent_dis, fill = case)) +
     size = 0.05
   ) +
   geom_text(
-    data = data_plot_dist_test_summary2,
+    data = data_plot_dist_test_summary,
     aes(
       x = 0,
       y = 0.8,
@@ -292,7 +277,7 @@ ggplot(data_plot2, aes(consistent_dis, fill = case)) +
     parse = F
   ) +
   scale_color_manual(values = c("midnightblue", "indianred4"),
-                     guide = F) +
+                     guide = "none") +
   scale_y_continuous(breaks = c(0, 0.5, 1)) +
   facet_grid(model ~ region) +
   labs(

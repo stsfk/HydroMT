@@ -117,7 +117,7 @@ for (i in 1:nrow(eval_grid)) {
     rbind(consistency_rate_distribution_tr)
 }
 
-# prepare data for piloting
+# prepare data for plotting
 
 # "data_gof" save the goodness of fit results for ranking the models;
 # the results are stored in "model_order"

@@ -221,7 +221,7 @@ ggplot(data_plot %>% filter(season == "Summer"), aes(item, value)) +
   scale_x_discrete(labels = parse(text = levels(data_plot$item))) +
   facet_grid(region ~ model) +
   labs(x = "MR considered",
-       y = "Consistent rate") +
+       y = "Consistency rate") +
   theme_bw(base_size = 9) +
   theme(legend.position = "top") +    
   theme(
@@ -263,7 +263,7 @@ ggplot(data_plot %>% filter(season == "Winter"), aes(item, value)) +
   scale_x_discrete(labels = parse(text = levels(data_plot$item))) +
   facet_grid(region ~ model) +
   labs(x = "MR considered",
-       y = "Consistent rate") +
+       y = "Consistency rate") +
   theme_bw(base_size = 9) +
   theme(legend.position = "top") +    
   theme(

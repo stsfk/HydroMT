@@ -38,15 +38,15 @@ if (!dir.exists(dir_path)){
 # "mr1_mt.Rda" stores the results of experiments with MR1
 load("./mt_results/mr1_mt.Rda")
 
-# model's goodness-of-fit (gof) and consistent rate
+# model's goodness-of-fit (gof) and consistency rate
 get_consistency_rate <- function(x) {
   # Consistent assessment results are labeled with "4"
   (sum(x == 4)) / length(x)
 }
 
 # The assessments of the experiment is stored in "eval_grid"
-# consistency_rate_tes: consistent rate for test sets
-# consistency_rate_trs: consistent rate for training sets
+# consistency_rate_tes: consistency rate for test sets
+# consistency_rate_trs: consistency rate for training sets
 eval_grid <- eval_grid %>%
   mutate(
     consistency_rate_tes = vector("list", 1),
@@ -60,7 +60,7 @@ for (i in 1:nrow(eval_grid)) {
   mt_tes <- eval_grid$mt_tes[[i]]
   
   # iteration over machine learning methods
-  # "consistency_rate_tr" and "consistency_rate_te" store the consistency rate of each ML method for on row of eval_grid
+  # "consistency_rate_tr" and "consistency_rate_te" store the consistency rate of each ML method for one row of eval_grid
   consistency_rate_tr <- tibble(model = names(mt_trs),
                                consistency_rate = vector("list", 1))
   consistency_rate_te <- tibble(model = names(mt_tes),

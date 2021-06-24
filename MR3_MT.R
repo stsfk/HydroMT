@@ -196,7 +196,7 @@ for (i in 1:nrow(eval_grid)) {
   # assign result
   eval_grid$mt_tes[[i]] <- tibble(
     model = c(names(df1), "XGBoost"),
-    consistent_rate = c(df1, df2))%>%
+    consistency_rate = c(df1, df2))%>%
     mutate(model = plyr::mapvalues(model, old_model_names, new_model_names))
 }
 
@@ -221,7 +221,7 @@ max(1 - uniqe_ratios) # which is at most 5% of the observations have non-unique 
 # they correspond to C(32,2) = 496 assessments
 # and the total number of possible assessments is C(743, 2) = 275653
 496/275653 = 0.001799364
-# That is, relaxing the requirement for events with non-unique value prediction 
+# That is, relaxing the requirement for events with non-unique value observations 
 # can only affects a few small portion of the assessments.
 
 

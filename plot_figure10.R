@@ -22,71 +22,84 @@ pacman::p_load(
   xgboost,
   lemon,
   ggrepel,
-  twosamples,
   scales
 )
 
 
-# Rain MT -----------------------------------------------------------------
+# MR1 ---------------------------------------------------------------------
+
+# "mr1_mt.Rda" stores the results of experiments with MR1
 
 load("./mt_results/mr1_mt.Rda")
 
-# GOF
+# extract goodness-of-fit (gof) results from "eval_grid"
 data_gof <- eval_grid %>%
   select(region, season, iter, gof_result) %>%
   unnest(gof_result)
 
+# order model according to r2
 model_order <- data_gof %>%
   group_by(model) %>%
   dplyr::summarise(mean_gof = mean(r2)) %>%
   arrange(desc(mean_gof)) %>%
   pull(model)
 
-# MR1
-get_consistent_rate <- function(x) {
+# function to compute consistency rate; the consistent assessment results are labelled with 4.
+get_consistency_rate <- function(x) {
   (sum(x == 4)) / length(x)
 }
 
+# The assessments of the experiment is stored in "eval_grid"
+# consistency_rate_tes: consistency rate for test sets
 eval_grid <- eval_grid %>%
-  mutate(consistent_rate_tes = vector("list", 1))
+  mutate(consistency_rate_tes = vector("list", 1))
 
 # iterate over region, season, data splits
 for (i in 1:nrow(eval_grid)) {
   mt_tes <- eval_grid$mt_tes[[i]]
   
   # iteration over machine learning methods
-  consistent_rate_te <- tibble(model = names(mt_tes),
-                               consistent_rate = -9999)
+  # "consistency_rate_te" stores the consistency rate of each ML method for one row of eval_grid;
+  # -9999 is a placeholder
+  consistency_rate_te <- tibble(model = names(mt_tes),
+                                consistency_rate = -9999)
   
+  # iterate over the models
   for (j in 1:length(mt_tes)) {
-    consistent_rate_te$consistent_rate[[j]] <- sapply(mt_tes[[j]], get_consistent_rate) %>% # a rate for each change magnitude
-      mean()# compute the mean of all change magnitudes
+    consistency_rate_te$consistency_rate[[j]] <- sapply(mt_tes[[j]], get_consistency_rate) %>% # a rate for each change magnitude
+      mean() # compute the mean of all change magnitudes
   }
   
-  eval_grid$consistent_rate_tes[[i]] <- consistent_rate_te
+  # store the result for one row of "eval_grid"
+  eval_grid$consistency_rate_tes[[i]] <- consistency_rate_te
 }
 
+# rename "eval_grid" to "eval_grid1" as it stores the results with respect to MR1 
 eval_grid1 <- eval_grid %>%
-  select(region, season, iter, consistent_rate_tes) %>%
-  unnest(cols = consistent_rate_tes) 
+  select(region, season, iter, consistency_rate_tes) %>%
+  unnest(cols = consistency_rate_tes)
+
 
 # MR3 ---------------------------------------------------------------------
 
+# "mr3_mt.Rda" stores the results of experiments with MR1;
+# The consistency results for MR3 of each model have already been computed
 load("./mt_results/mr3_mt.Rda")
 
 eval_grid3 <- eval_grid %>%
-  dplyr::select(region, season, iter, org_mt) %>%
-  unnest(cols = org_mt)
+  dplyr::select(region, season, iter, mt_tes) %>%
+  unnest(cols = mt_tes)
 
 # Plot --------------------------------------------------------------------
 
+# join the results of MR1 and MR3 and the GOF results
 data_plot <- eval_grid3 %>%
   left_join(eval_grid1, by = c("region", "season", "iter", "model")) %>%
   left_join(data_gof, by = c("region", "season", "iter", "model")) %>%
-  dplyr::rename(mr3 = org_consistent_rate,
-                mr1 = consistent_rate,
+  dplyr::rename(mr3 = consistency_rate.x,
+                mr1 = consistency_rate.y,
                 r2 = r2) %>%
-  gather(item, value, mr1, r2) %>%
+  gather(item, value, mr1, r2) %>% # note results for "MR3" is not joint; it is used as the axis of the plot
   mutate(
     region = factor(
       region,
@@ -105,7 +118,7 @@ data_plot <- eval_grid3 %>%
     model = factor(model, levels = model_order)
   )
 
-
+# labels of the facet strips
 my_labeller <-
   as_labeller(
     c(
@@ -119,7 +132,7 @@ my_labeller <-
     default = label_parsed
   )
 
-
+# The error bars shown on the plot
 data_plot2 <- data_plot %>%
   group_by(region, season, model, item) %>%
   dplyr::summarise(
@@ -132,6 +145,7 @@ data_plot2 <- data_plot %>%
     .groups = 'drop'
   )
 
+# plot only the summer floods
 ggplot() +
   geom_point(
     data = data_plot %>% filter(season == "Summer"),
@@ -139,7 +153,7 @@ ggplot() +
     size = 1,
     alpha = 0.5
   ) +
-  geom_errorbar(
+  geom_errorbar( # the vertical error bars
     data = data_plot2 %>% filter(season == "Summer"),
     aes(
       x = mean_mr3,
@@ -150,7 +164,7 @@ ggplot() +
     ),
     size = 0.5
   ) +
-  geom_errorbar(
+  geom_errorbar( # the horizontal error bars
     data = data_plot2 %>% filter(season == "Summer"),
     aes(
       x = mean_mr3,
@@ -161,7 +175,7 @@ ggplot() +
     ),
     size = 0.5
   ) +
-  geom_text_repel(
+  geom_text_repel( # labels the model using text
     data = data_plot2 %>% filter(season == "Summer"),
     aes(
       label = model %>% as.character(),

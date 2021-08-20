@@ -57,7 +57,7 @@ eval_grid_mr1 <- eval_grid_mr1 %>%
     consistent_rate_tes = vector("list", 1)
   )
 
-  # iterate over region, season, iters
+# iterate over region, season, iters
 for (i in 1:nrow(eval_grid_mr1)) {
   mt_tes <- eval_grid_mr1$mt_tes[[i]]
   
@@ -95,10 +95,10 @@ data_mr2 <- eval_grid_mr2 %>%
 
 # get mr3
 data_mr3 <- eval_grid_mr3 %>%
-  dplyr::select(region, season, iter, org_mt) %>%
-  dplyr::rename(mr3 = org_mt) %>%
+  dplyr::select(region, season, iter, mt_tes) %>%
+  dplyr::rename(mr3 = mt_tes) %>%
   unnest(mr3) %>%
-  dplyr::rename(mr3 = org_consistent_rate) %>%
+  dplyr::rename(mr3 = consistency_rate) %>%
   dplyr::filter(model == "XGBoost")
 
 # combine
